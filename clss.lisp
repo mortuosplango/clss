@@ -2,21 +2,27 @@
 ;;;;; 
 ;;;;; 
 
-(in-package #:sdl-gfx-examples)
+(in-package :sdl-gfx-examples)
 
 (defparameter *padding* 30)
 (defparameter *width* 600)
 (defparameter *height* 300)
 (defparameter *sample* nil)
+(defparameter *top-padding* 20)
 (defparameter *mixer-opened* nil)
 (defparameter *sample* 0)
 (defparameter *samples* '())
 (defparameter *tick* 0)
+(defparameter *length* 0.3)
 (defparameter *lispbuilder-path* "/home/hb/src/lispbuilder/")
+(defparameter *sample-path* "/home/hb/src/clss/samples/")
+(defparameter *rows* '())
+
 (dolist (sample (directory
                  (make-pathname :name :wild
                                 :type "wav"
-                                :directory '(:relative "samples"))))
+                                :directory (pathname-directory
+                                            (pathname *sample-path*)))))
   (push sample *samples*))
 
 (defun load-libs ()
@@ -39,10 +45,10 @@
 
 (defmethod load-sample ((row seq-row))
   (setf (sample-instance row) (sdl-mixer:load-sample (sample row))))
-  
+
 
 (defmethod display ((row seq-row) &key (surface sdl:*default-display*))
-  (let ((pos-y (* (pos row) *padding*))
+  (let ((pos-y (+ (* (pos row) *padding*) *top-padding*))
         (i 0)
         )
     (dolist (note (code row))
@@ -77,7 +83,7 @@
                :surface surface
                :color (color row)
                )))
-          (incf i))))
+      (incf i))))
 
 (defmethod play ((row seq-row))
   (if (nth *tick* (code row))
@@ -87,10 +93,10 @@
   (when *samples*
     (when (sdl-mixer:sample-playing-p nil)
       (sdl-mixer:pause-sample t)
-       (sdl-mixer:Halt-sample :channel t)))
-    ;;   (dolist (sample *samples*)
-    ;;     (sdl:Free sample))
-    ;;   (setf *samples* nil))
+      (sdl-mixer:Halt-sample :channel t)))
+  ;;   (dolist (sample *samples*)
+  ;;     (sdl:Free sample))
+  ;;   (setf *samples* nil))
   (when *mixer-opened*
     (sdl-mixer:Close-Audio t)
     (setf *mixer-opened* nil))
@@ -101,21 +107,19 @@
   (cond
     ((sdl:key= key :SDL-KEY-ESCAPE)
      (sdl:push-quit-event))))
-;; ((sdl:key= key :sdl-key-a)
-;;  (sdl-mixer:play-sample
-;;   (nth 
-;;    (setf *sample* (round (* (/ (xpos *r1*) *width*)
-;;                             (length *samples*))))
-;;    *samples*)))))
 
-(defun handle-mouse (x y row)
-  (let ((index (floor (/ x *padding*))))
-    (if (< index (w row))
-        (if (nth index (code row))
-            (setf (nth index (code row)) nil)
-            (setf (nth index (code row)) t)))
-        (print (code row))
-    ))
+
+(defun handle-mouse (x y)
+  (let ((index (floor (/ x *padding*)))
+        (rownum (floor (/ y *padding*)))
+        )
+    (if (< rownum (length *rows*))
+        (let ((row (nth rownum *rows*)))
+          (if (< index (w row))
+              (if (nth index (code row))
+                  (setf (nth index (code row)) nil)
+                  (setf (nth index (code row)) t)))
+          (print (code row))))))
 
 (defun sample-finished-action ()
   (sdl-mixer:register-sample-finished
@@ -123,56 +127,72 @@
      (declare (ignore channel))
      nil)))
 
-(defun cltx ()
-  (let ((row1 (make-instance 'seq-row
-                              :w 16
-                              :pos 1
-                              :sample (first *samples*)))
+(defun clss ()
+  (let (
         (status "")
         (timeout 1)      
         (100-frames-p (every-n-frames 100)))
+    (setf *rows* (list (make-instance 'seq-row
+                                      :w 16
+                                      :pos 0
+                                      :color sdl:*cyan*
+                                      :sample (first *samples*))
+                       (make-instance 'seq-row
+                                      :w 16
+                                      :pos 1
+                                      :sample (nth 2 *samples*))
+                       (make-instance 'seq-row
+                                      :w 16
+                                      :pos 2
+                                      :color sdl:*green*
+                                      :sample (nth 3 *samples*))))
+    (print *rows*)
     (sdl:with-init ()
-      (sdl:window *width* *height*
-                  :title-caption "cltx")
-      (setf (sdl:frame-rate) 60)
-      (sdl-gfx:initialise-default-font)
+    (sdl:window *width* *height*
+                :title-caption "cltx")
+    (setf (sdl:frame-rate) 60)
+    (sdl-gfx:initialise-default-font)
+    
+    (sdl:clear-display (sdl:color))
+    (setf status "Opening Audio Mixer.....")
+    (draw-fps status 10 150 sdl:*default-font* sdl:*default-display* t)
+    (sdl:enable-key-repeat 500 50)
+    (sdl-mixer:init-mixer :mp3)
+    (setf *mixer-opened*
+          (sdl-mixer:OPEN-AUDIO :chunksize 1024 :enable-callbacks nil))
+    (when *mixer-opened*
+      (setf status "Opened Audio Mixer!")
+      (sample-finished-action)
+      (dolist (row *rows*)
+        (load-sample row))
+      (sdl-mixer:allocate-channels 16))
+    (print status)
+    
+    (sdl:with-events ()
+      (:quit-event ()
+                   (clean-up)
+                   t)
+      (:video-expose-event () (sdl:update-display))
+      (:mouse-button-down-event (:x x :y y)
+                                (handle-mouse x y))
+      (:key-down-event (:key key)
+                       (when *mixer-opened*
+                         (handle-key key)))
       
-      (sdl:clear-display (sdl:color))
-      (setf status "Opening Audio Mixer.....")
-      (draw-fps status 10 150 sdl:*default-font* sdl:*default-display* t)
-      (sdl:enable-key-repeat 500 50)
-      (sdl-mixer:init-mixer :mp3)
-      (setf *mixer-opened*
-            (sdl-mixer:OPEN-AUDIO :chunksize 1024 :enable-callbacks nil))
-      (when *mixer-opened*
-        (setf status "Opened Audio Mixer!")
-        (sample-finished-action)
-        (load-sample row1)
-        (sdl-mixer:allocate-channels 16))
-      (print status)
-        
-      (sdl:with-events ()
-        (:quit-event ()
-                     (clean-up)
-                     t)
-        (:video-expose-event () (sdl:update-display))
-        (:mouse-button-down-event (:x x :y y)
-                                  (handle-mouse x y row1))
-        (:key-down-event (:key key)
-                         (when *mixer-opened*
-                           (handle-key key)))
-        
-        (:idle ()
-               (sdl:clear-display (sdl:color))
-               (incf timeout (sdl:dt))
-               (if (> timeout 1)
-                   (progn (setf *tick* (mod (+ *tick* 1) 16))
-                          (play row1)
-                          (setf timeout (mod timeout 1))))
-               (display row1)
+      (:idle ()
+             (sdl:clear-display (sdl:color))
+             (incf timeout (sdl:dt))
+             (if (> timeout *length*)
+                 (progn (setf *tick* (mod (+ *tick* 1) 16))
+                        (when *mixer-opened*
+                          (dolist (row *rows*)
+                            (play row)))
+                        (setf timeout (mod timeout *length*))))
+             (dolist (row *rows*)
+               (display row))
 
-               (draw-fps status
-                         10 150 sdl:*default-font* sdl:*default-display*
-                         (funcall 100-frames-p))
-               
-               (sdl:update-display))))))
+             (draw-fps status
+                       10 150 sdl:*default-font* sdl:*default-display*
+                       (funcall 100-frames-p))
+             
+             (sdl:update-display))))))
