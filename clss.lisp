@@ -145,54 +145,60 @@
                                       :w 16
                                       :pos 2
                                       :color sdl:*green*
-                                      :sample (nth 3 *samples*))))
+                                      :sample (nth 4 *samples*))
+                       (make-instance 'seq-row
+                                      :w 16
+                                      :pos 3
+                                      :color sdl:*white*
+                                      :sample (nth 5 *samples*))
+                       ))
     (print *rows*)
     (sdl:with-init ()
-    (sdl:window *width* *height*
-                :title-caption "cltx")
-    (setf (sdl:frame-rate) 60)
-    (sdl-gfx:initialise-default-font)
-    
-    (sdl:clear-display (sdl:color))
-    (setf status "Opening Audio Mixer.....")
-    (draw-fps status 10 150 sdl:*default-font* sdl:*default-display* t)
-    (sdl:enable-key-repeat 500 50)
-    (sdl-mixer:init-mixer :mp3)
-    (setf *mixer-opened*
-          (sdl-mixer:OPEN-AUDIO :chunksize 1024 :enable-callbacks nil))
-    (when *mixer-opened*
-      (setf status "Opened Audio Mixer!")
-      (sample-finished-action)
-      (dolist (row *rows*)
-        (load-sample row))
-      (sdl-mixer:allocate-channels 16))
-    (print status)
-    
-    (sdl:with-events ()
-      (:quit-event ()
-                   (clean-up)
-                   t)
-      (:video-expose-event () (sdl:update-display))
-      (:mouse-button-down-event (:x x :y y)
-                                (handle-mouse x y))
-      (:key-down-event (:key key)
-                       (when *mixer-opened*
-                         (handle-key key)))
+      (sdl:window *width* *height*
+                  :title-caption "cltx")
+      (setf (sdl:frame-rate) 60)
+      (sdl-gfx:initialise-default-font)
       
-      (:idle ()
-             (sdl:clear-display (sdl:color))
-             (incf timeout (sdl:dt))
-             (if (> timeout *length*)
-                 (progn (setf *tick* (mod (+ *tick* 1) 16))
-                        (when *mixer-opened*
-                          (dolist (row *rows*)
-                            (play row)))
-                        (setf timeout (mod timeout *length*))))
-             (dolist (row *rows*)
-               (display row))
+      (sdl:clear-display (sdl:color))
+      (setf status "Opening Audio Mixer.....")
+      (draw-fps status 10 150 sdl:*default-font* sdl:*default-display* t)
+      (sdl:enable-key-repeat 500 50)
+      (sdl-mixer:init-mixer :mp3)
+      (setf *mixer-opened*
+            (sdl-mixer:OPEN-AUDIO :chunksize 1024 :enable-callbacks nil))
+      (when *mixer-opened*
+        (setf status "Opened Audio Mixer!")
+        (sample-finished-action)
+        (dolist (row *rows*)
+          (load-sample row))
+        (sdl-mixer:allocate-channels 16))
+      (print status)
+      
+      (sdl:with-events ()
+        (:quit-event ()
+                     (clean-up)
+                     t)
+        (:video-expose-event () (sdl:update-display))
+        (:mouse-button-down-event (:x x :y y)
+                                  (handle-mouse x y))
+        (:key-down-event (:key key)
+                         (when *mixer-opened*
+                           (handle-key key)))
+        
+        (:idle ()
+               (sdl:clear-display (sdl:color))
+               (incf timeout (sdl:dt))
+               (if (> timeout *length*)
+                   (progn (setf *tick* (mod (+ *tick* 1) 16))
+                          (when *mixer-opened*
+                            (dolist (row *rows*)
+                              (play row)))
+                          (setf timeout (mod timeout *length*))))
+               (dolist (row *rows*)
+                 (display row))
 
-             (draw-fps status
-                       10 150 sdl:*default-font* sdl:*default-display*
-                       (funcall 100-frames-p))
-             
-             (sdl:update-display))))))
+               (draw-fps status
+                         10 150 sdl:*default-font* sdl:*default-display*
+                         (funcall 100-frames-p))
+               
+               (sdl:update-display))))))
