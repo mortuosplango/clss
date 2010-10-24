@@ -2,37 +2,48 @@
 ;;;;; 
 ;;;;; 
 
-(in-package :sdl-gfx-examples)
+(in-package :sdl-gfx)
 
 (defparameter *padding* 30)
-(defparameter *sample* nil)
 (defparameter *top-padding* 20)
 (defparameter *width* 800)
 (defparameter *height* 300)
+(defparameter *num-rows* 8)
 (defparameter *mixer-opened* nil)
-(defparameter *sample* 0)
 (defparameter *samples* '())
-(defparameter *tick* 0)
-(defparameter *length* 0.3)
+(defparameter *bpm* 120)
 (defparameter *lispbuilder-path* "/home/hb/src/lispbuilder/")
 (defparameter *sample-path* "/home/hb/src/clss/samples/")
-(defparameter *rows* '())
 
-(dolist (sample (directory
-                 (make-pathname :name :wild
-                                :type "wav"
-                                :directory (pathname-directory
-                                            (pathname *sample-path*)))))
-  (push sample *samples*))
+(defun every-n-frames (max)
+  (let ((count 0))
+    #'(lambda ()
+	(if (eql 0 (mod (incf count 1) max))
+	    (setf count 0)
+	    nil))))
+
+(defun draw-status (string x y font surface render-p)
+  ;; Create a new status string when render-p is T
+  (when render-p
+    (sdl:render-string-shaded string
+                              sdl:*white*
+                              sdl:*black*
+                              :font font
+                              :cache t
+                              :free t))
+  ;; Draw the string each frame
+  (sdl:draw-font-at-* x y :font font :surface surface))
+
 
 (defun load-libs ()
   (require 'asdf)
   (dolist (component (list "sdl" "sdl-mixer" "sdl-gfx"
-                           "sdl-gfx-examples" "sdl-image" "sdl-ttf"))
+                           "sdl-image" "sdl-ttf"))
     (pushnew (format nil "~Alispbuilder-~A/"
                      *lispbuilder-path* component)
              asdf:*central-registry* :test #'equal)
     (asdf:oos 'asdf:load-op (format nil "lispbuilder-~A" component))))
+
 
 (defclass seq-row ()
   ((w :accessor w :initform 16 :initarg :w)
@@ -43,58 +54,65 @@
    (sample-instance :accessor sample-instance :initarg :sample-instance)
    ))
 
-(defgeneric load-sample (seq-row))
-(defmethod load-sample ((row seq-row))
-  (setf (sample-instance row) (sdl-mixer:load-sample (nth (sample row) *samples*))))
 
-(defmethod display ((row seq-row) &key (surface sdl:*default-display*))
+(defgeneric load-sample (seq-row)
+  (:documentation "load the sample file of the row into memory"))
+
+(defmethod load-sample ((row seq-row))
+  (setf (sample-instance row)
+        (sdl-mixer:load-sample (nth (sample row) *samples*))))
+
+
+(defgeneric display (seq-row beat &key surface)
+  (:documentation "display the row"))
+
+(defmethod display ((row seq-row) beat &key (surface sdl:*default-display*))
   (let ((pos-y (+ (* (pos row) *padding*) *top-padding*))
         (i 0))
     (dolist (note (code row))
-      (let ((pos-x (+ (* i *padding*) 20))
-            (radius (round (* *padding* 0.4))))
-        (if note
-            (if (equal *tick* i)
-                (sdl-gfx:draw-filled-circle-* pos-x pos-y radius
-                                              :surface surface :color sdl:*red*)
-                (sdl-gfx:draw-filled-circle-* pos-x pos-y radius
-                                              :surface surface :color (color row)))
-            (if (equal *tick* i)
-                (sdl-gfx:draw-circle-* pos-x pos-y radius
-                                       :surface surface :color sdl:*red*)
-                (sdl-gfx:draw-circle-* pos-x pos-y radius
-                                       :surface surface :color (color row))))
-        (incf i)))
+      (funcall (if note
+                   'sdl-gfx:draw-filled-circle-*
+                   'sdl-gfx:draw-circle-*)
+               (+ (* i *padding*) 20)
+               pos-y
+               (round (* *padding* 0.4))
+               :surface surface
+               :color (if (equal beat i) sdl:*red* (color row)))
+        (incf i))
     (sdl:draw-string-solid-* (pathname-name (nth (sample row) *samples*))
                              (+ (* i *padding*) 20)
                              pos-y
                              :color (color row)
-                             :surface surface
-                             )
-    ))
+                             :surface surface)))
 
-(defgeneric play (seq-row))
-(defmethod play ((row seq-row))
-  (if (nth *tick* (code row))
+(defgeneric play (seq-row beat)
+  (:documentation "play the specific beat in the row"))
+
+(defmethod play ((row seq-row) beat)
+  (if (nth beat (code row))
       (sdl-mixer:play-sample (sample-instance row))))
 
-(defgeneric change-sample (seq-row direction))
+(defgeneric change-sample (seq-row direction)
+  (:documentation "free the old sample and load the new sample into memory"))
+
 (defmethod change-sample ((row seq-row) direction)
   (setf (sample row) (mod (+ (sample row) direction) (length *samples*)))
   (sdl:Free (sample-instance row))
   (load-sample row))
 
-(defun clean-up ()
+
+(defun clean-up (rows)
   (when *samples*
     (when (sdl-mixer:sample-playing-p nil)
       (sdl-mixer:pause-sample t)
       (sdl-mixer:Halt-sample :channel t)))
-  (dolist (row *rows*)
+  (dolist (row rows)
     (sdl:Free (sample-instance row)))
   (when *mixer-opened*
     (sdl-mixer:Close-Audio t)
     (setf *mixer-opened* nil))
   (sdl-mixer:quit-mixer))
+
 
 (defun handle-key(key)
   "handle key presses"
@@ -103,12 +121,11 @@
      (sdl:push-quit-event))))
 
 
-(defun handle-mouse (x y)
+(defun handle-mouse (x y rows)
   (let ((index (floor (/ x *padding*)))
-        (rownum (floor (/ y *padding*)))
-        )
-    (if (< rownum (length *rows*))
-        (let ((row (nth rownum *rows*)))
+        (rownum (floor (/ y *padding*))))
+    (if (< rownum (length rows))
+        (let ((row (nth rownum rows)))
           (if (< index (w row))
               (progn
                 (if (nth index (code row))
@@ -124,27 +141,34 @@
      nil)))
 
 (defun clss ()
-  (let (
-        (status "")
-        (timeout 1)      
+  (let ((status "")
+        (timeout 1)
+        (beat 0)
+        (rows '())
+        (beat-dur (/ 60.0 *bpm*))
         (100-frames-p (every-n-frames 100)))
-    (dotimes (i 8)
+    (dolist (sample (directory
+                     (make-pathname :name :wild
+                                    :type "wav"
+                                    :directory (pathname-directory
+                                                (pathname *sample-path*)))))
+      (push sample *samples*))
+    (dotimes (i *num-rows*)
       (push (make-instance 'seq-row
                            :w 16
                            :pos i
                            :color (nth (mod i 2) (list sdl:*blue* sdl:*cyan*))
                            :sample i)
-                           *rows*))
-    (setf *rows* (nreverse *rows*))
+                           rows))
+    (setf rows (nreverse rows))
     (sdl:with-init ()
       (sdl:window *width* *height*
                   :title-caption "clss")
       (setf (sdl:frame-rate) 60)
       (sdl-gfx:initialise-default-font)
-      
       (sdl:clear-display (sdl:color))
       (setf status "Opening Audio Mixer.....")
-      (draw-fps status 10 150 sdl:*default-font* sdl:*default-display* t)
+      (draw-status status 10 150 sdl:*default-font* sdl:*default-display* t)
       (sdl:enable-key-repeat 500 50)
       (sdl-mixer:init-mixer :mp3)
       (setf *mixer-opened*
@@ -154,36 +178,37 @@
       (when *mixer-opened*
         (setf status "Opened Audio Mixer!")
         (sample-finished-action)
-        (dolist (row *rows*)
+        (dolist (row rows)
           (load-sample row))
         (sdl-mixer:allocate-channels 16))
-      (print status)
       
       (sdl:with-events ()
         (:quit-event ()
-                     (clean-up)
+                     (clean-up rows)
                      t)
         (:video-expose-event () (sdl:update-display))
         (:mouse-button-down-event (:x x :y y)
-                                  (handle-mouse x y))
+                                  (handle-mouse x y rows))
         (:key-down-event (:key key)
                          (when *mixer-opened*
                            (handle-key key)))
         
         (:idle ()
                (sdl:clear-display (sdl:color))
-               (incf timeout (sdl:dt))
-               (if (> timeout *length*)
-                   (progn (setf *tick* (mod (+ *tick* 1) 16))
+               (if (> (incf timeout (sdl:dt)) beat-dur)
+                   (progn (setf beat (mod (+ beat 1) 16))
                           (when *mixer-opened*
-                            (dolist (row *rows*)
-                              (play row)))
-                          (setf timeout (mod timeout *length*))))
-               (dolist (row *rows*)
-                 (display row))
+                            (dolist (row rows)
+                              (play row beat)))
+                          (setf timeout (mod timeout beat-dur))))
+               (dolist (row rows)
+                 (display row beat))
 
-               (draw-fps status
-                         10 (- *height* 20) sdl:*default-font* sdl:*default-display*
+               (draw-status status
+                         10
+                         (- *height* 20)
+                         sdl:*default-font*
+                         sdl:*default-display*
                          (funcall 100-frames-p))
                
                (sdl:update-display))))))
