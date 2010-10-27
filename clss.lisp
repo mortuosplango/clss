@@ -2,11 +2,14 @@
 ;;;;; 
 ;;;;; 
 
-(in-package :sdl-gfx)
-
-
+;;;; to run:
+;;; change and evaluate this:
 (defparameter *lispbuilder-path* "/home/hb/src/lispbuilder/")
+
+;;; evaluate this:
 (require 'asdf)
+
+;;; and this:
 (dolist (component (list "sdl" "sdl-mixer" "sdl-gfx"
                          "sdl-image" "sdl-ttf"))
   (pushnew (format nil "~Alispbuilder-~A/"
@@ -15,6 +18,14 @@
   (asdf:oos 'asdf:load-op (format nil "lispbuilder-~A" component)))
 
 
+(in-package :sdl-gfx)
+
+;;; change this to a path containing samples
+;;; with the ending *sample-type* (wav or aif)
+(defparameter *sample-path* "/home/hb/src/clss/samples/")
+(defparameter *sample-type* "wav")
+
+;;; evaluate the whole file and then run (sdl-gfx:clss)
 
 (defparameter *padding* 30)
 (defparameter *top-padding* 20)
@@ -24,7 +35,6 @@
 (defparameter *mixer-opened* nil)
 (defparameter *samples* '())
 (defparameter *bpm* 120)
-(defparameter *sample-path* "/home/hb/src/clss/samples/")
 
 (defun every-n-frames (max)
   (let ((count 0))
@@ -153,7 +163,7 @@
         (100-frames-p (every-n-frames 100)))
     (setf *samples* (directory
                      (make-pathname :name :wild
-                                    :type "wav"
+                                    :type *sample-type*
                                     :directory (pathname-directory
                                                 (pathname *sample-path*)))))
     (dotimes (i *num-rows*)
@@ -216,4 +226,3 @@
                          (funcall 100-frames-p))
                
                (sdl:update-display))))))
-

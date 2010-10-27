@@ -1,0 +1,14 @@
+clss
+====
+
+
+a little step sequencer built in sdl
+
+it can't do much, but also fucks up the timing if a lot of samples are playing
+
+to use:
+=======
+
+ - install lispbuilder https://code.google.com/p/lispbuilder/
+ - follow the instructions in clss.lisp
+
