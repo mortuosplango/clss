@@ -1,5 +1,4 @@
 clss
-====
 
 
 a little step sequencer built in sdl
@@ -7,8 +6,15 @@ a little step sequencer built in sdl
 it can't do much, but also fucks up the timing if a lot of samples are playing
 
 to use:
-=======
 
  - install lispbuilder https://code.google.com/p/lispbuilder/
  - follow the instructions in clss.lisp
+ - click on the sample name at the end of a row to change the sample
+ - click on a round thing to change the state of a note (on or off)
+ - [esc] to stop the application
 
+
+planned features:
+ - [ ] osc support
+ - [ ] better timing
+ - [ ] unicorns
