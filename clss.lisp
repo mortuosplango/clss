@@ -4,6 +4,18 @@
 
 (in-package :sdl-gfx)
 
+
+(defparameter *lispbuilder-path* "/home/hb/src/lispbuilder/")
+(require 'asdf)
+(dolist (component (list "sdl" "sdl-mixer" "sdl-gfx"
+                         "sdl-image" "sdl-ttf"))
+  (pushnew (format nil "~Alispbuilder-~A/"
+                   *lispbuilder-path* component)
+           asdf:*central-registry* :test #'equal)
+  (asdf:oos 'asdf:load-op (format nil "lispbuilder-~A" component)))
+
+
+
 (defparameter *padding* 30)
 (defparameter *top-padding* 20)
 (defparameter *width* 800)
@@ -12,7 +24,6 @@
 (defparameter *mixer-opened* nil)
 (defparameter *samples* '())
 (defparameter *bpm* 120)
-(defparameter *lispbuilder-path* "/home/hb/src/lispbuilder/")
 (defparameter *sample-path* "/home/hb/src/clss/samples/")
 
 (defun every-n-frames (max)
@@ -23,7 +34,7 @@
 	    nil))))
 
 (defun draw-status (string x y font surface render-p)
-  ;; Create a new status string when render-p is T
+  "Create a new status string when render-p is T"
   (when render-p
     (sdl:render-string-shaded string
                               sdl:*white*
@@ -33,16 +44,6 @@
                               :free t))
   ;; Draw the string each frame
   (sdl:draw-font-at-* x y :font font :surface surface))
-
-
-(defun load-libs ()
-  (require 'asdf)
-  (dolist (component (list "sdl" "sdl-mixer" "sdl-gfx"
-                           "sdl-image" "sdl-ttf"))
-    (pushnew (format nil "~Alispbuilder-~A/"
-                     *lispbuilder-path* component)
-             asdf:*central-registry* :test #'equal)
-    (asdf:oos 'asdf:load-op (format nil "lispbuilder-~A" component))))
 
 
 (defclass seq-row ()
@@ -92,6 +93,7 @@
   (if (nth beat (code row))
       (sdl-mixer:play-sample (sample-instance row))))
 
+
 (defgeneric change-sample (seq-row direction)
   (:documentation "free the old sample and load the new sample into memory"))
 
@@ -134,11 +136,13 @@
                 (print (code row)))
               (change-sample row 1))))))
 
+
 (defun sample-finished-action ()
   (sdl-mixer:register-sample-finished
    (lambda (channel)
      (declare (ignore channel))
      nil)))
+
 
 (defun clss ()
   (let ((status "")
@@ -147,20 +151,20 @@
         (rows '())
         (beat-dur (/ 60.0 *bpm*))
         (100-frames-p (every-n-frames 100)))
-    (dolist (sample (directory
+    (setf *samples* (directory
                      (make-pathname :name :wild
                                     :type "wav"
                                     :directory (pathname-directory
                                                 (pathname *sample-path*)))))
-      (push sample *samples*))
     (dotimes (i *num-rows*)
       (push (make-instance 'seq-row
                            :w 16
                            :pos i
                            :color (nth (mod i 2) (list sdl:*blue* sdl:*cyan*))
                            :sample i)
-                           rows))
+            rows))
     (setf rows (nreverse rows))
+    
     (sdl:with-init ()
       (sdl:window *width* *height*
                   :title-caption "clss")
@@ -212,3 +216,4 @@
                          (funcall 100-frames-p))
                
                (sdl:update-display))))))
+
